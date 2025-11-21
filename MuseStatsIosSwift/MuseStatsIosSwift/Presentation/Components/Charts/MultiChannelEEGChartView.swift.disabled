@@ -1,0 +1,185 @@
+import SwiftUI
+
+/// Vista de gráfico EEG multi-canal mejorada
+/// Muestra los 4 canales EEG simultáneamente con colores diferentes
+/// Basado en el GraphView.swift del ejemplo oficial
+struct MultiChannelEEGChartView: View {
+    @Binding var dataPoints: [EEGChannel: [ChartDataPoint]]
+    
+    let maxPoints = 1500
+    let maxSignal: Double = 1800.0
+    
+    let channelColors: [EEGChannel: Color] = [
+        .tp9: .green,
+        .af7: .purple,
+        .af8: .blue,
+        .tp10: .gray
+    ]
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background
+                Rectangle()
+                    .fill(Color.black)
+                
+                // Grid lines
+                gridLines(in: geometry.size)
+                
+                // Channel plots
+                ForEach(EEGChannel.allCases, id: \.self) { channel in
+                    if let points = dataPoints[channel], !points.isEmpty {
+                        channelPath(
+                            for: channel,
+                            points: points,
+                            in: geometry.size
+                        )
+                        .stroke(
+                            channelColors[channel] ?? .white,
+                            lineWidth: 1.5
+                        )
+                    }
+                }
+                
+                // Channel labels
+                channelLabels(in: geometry.size)
+                
+                // Border
+                Rectangle()
+                    .stroke(Color.gray.opacity(0.5), lineWidth: 2)
+            }
+        }
+        .frame(height: 300)
+        .background(Color.black)
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Grid Lines
+    
+    private func gridLines(in size: CGSize) -> some View {
+        let channelHeight = size.height / 4
+        
+        return ZStack {
+            // Horizontal dividers
+            ForEach(1..<4) { index in
+                Path { path in
+                    let y = CGFloat(index) * channelHeight
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+            }
+            
+            // Vertical grid
+            ForEach(0..<10) { index in
+                Path { path in
+                    let x = CGFloat(index) * (size.width / 10)
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: size.height))
+                }
+                .stroke(Color.gray.opacity(0.1), lineWidth: 0.5)
+            }
+        }
+    }
+    
+    // MARK: - Channel Path
+    
+    private func channelPath(for channel: EEGChannel, points: [ChartDataPoint], in size: CGSize) -> Path {
+        let channelHeight = size.height / 4
+        let channelIndex = CGFloat(channel.index)
+        let yScale = size.height / (4 * maxSignal)
+        let yOffset = channelHeight * channelIndex + channelHeight / 16
+        
+        // Get the last N points that fit in the width
+        let numPoints = min(Int(size.width), points.count)
+        let startIndex = points.count - numPoints
+        
+        var path = Path()
+        
+        guard numPoints > 0 else { return path }
+        
+        // Calculate display points
+        let displayPoints = (startIndex..<points.count).map { index -> CGPoint in
+            let point = points[index]
+            let x = CGFloat(index - startIndex)
+            let value = point.value.isNaN ? 0 : point.value
+            let y = (value * yScale) + yOffset
+            return CGPoint(x: x, y: y)
+        }
+        
+        // Draw path
+        if let first = displayPoints.first {
+            path.move(to: first)
+            for point in displayPoints.dropFirst() {
+                path.addLine(to: point)
+            }
+        }
+        
+        return path
+    }
+    
+    // MARK: - Channel Labels
+    
+    private func channelLabels(in size: CGSize) -> some View {
+        let channelHeight = size.height / 4
+        
+        return ZStack(alignment: .leading) {
+            ForEach(EEGChannel.allCases, id: \.self) { channel in
+                Text(channel.rawValue)
+                    .font(.caption.bold())
+                    .foregroundColor(channelColors[channel])
+                    .padding(4)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(4)
+                    .position(
+                        x: 30,
+                        y: CGFloat(channel.index) * channelHeight + 15
+                    )
+            }
+        }
+    }
+}
+
+// MARK: - EEG Channel Enum
+
+enum EEGChannel: String, CaseIterable {
+    case tp9 = "TP9"
+    case af7 = "AF7"
+    case af8 = "AF8"
+    case tp10 = "TP10"
+    
+    var index: Int {
+        switch self {
+        case .tp9: return 0
+        case .af7: return 1
+        case .af8: return 2
+        case .tp10: return 3
+        }
+    }
+}
+
+// MARK: - Preview
+
+struct MultiChannelEEGChartView_Previews: PreviewProvider {
+    static var previews: some View {
+        MultiChannelEEGChartView(
+            dataPoints: .constant([
+                .tp9: generateMockData(),
+                .af7: generateMockData(),
+                .af8: generateMockData(),
+                .tp10: generateMockData()
+            ])
+        )
+        .preferredColorScheme(.dark)
+    }
+    
+    static func generateMockData() -> [ChartDataPoint] {
+        (0..<100).map { i in
+            ChartDataPoint(
+                time: Double(i),
+                value: sin(Double(i) * 0.1) * 500
+            )
+        }
+    }
+}
+

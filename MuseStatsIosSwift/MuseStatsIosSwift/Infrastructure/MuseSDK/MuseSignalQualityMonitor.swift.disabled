@@ -1,0 +1,166 @@
+import Foundation
+
+/// Monitor de calidad de señal para dispositivos Muse
+/// Proporciona información en tiempo real sobre la calidad del contacto de cada electrodo
+final class MuseSignalQualityMonitor: NSObject {
+    
+    // MARK: - Callbacks
+    
+    var onQualityChanged: ((SignalQuality) -> Void)?
+    var onBatteryChanged: ((Int) -> Void)?
+    
+    // MARK: - Properties
+    
+    private var currentQuality: SignalQuality = SignalQuality()
+    private var batteryLevel: Int = 100
+    
+    // MARK: - Register Listeners
+    
+    /// Registra los listeners necesarios en un dispositivo Muse
+    /// - Parameter muse: Dispositivo Muse
+    func register(on muse: IXNMuse) {
+        // Register for horseshoe data (signal quality)
+        muse.register(self, type: .horseshoe)
+        
+        // Register for battery data
+        muse.register(self, type: .battery)
+        
+        // Register for DRL/REF data
+        muse.register(self, type: .drlRef)
+    }
+    
+    /// Desregistra los listeners
+    /// - Parameter muse: Dispositivo Muse
+    func unregister(from muse: IXNMuse) {
+        muse.unregister(self, type: .horseshoe)
+        muse.unregister(self, type: .battery)
+        muse.unregister(self, type: .drlRef)
+    }
+}
+
+// MARK: - IXNMuseDataListener
+
+extension MuseSignalQualityMonitor: IXNMuseDataListener {
+    func receive(_ packet: IXNMuseDataPacket?, muse: IXNMuse?) {
+        guard let packet = packet else { return }
+        
+        switch packet.packetType() {
+        case .horseshoe:
+            // Horseshoe data indica la calidad del contacto de cada electrodo
+            // Valores: 1 = buen contacto, 2 = ok, 3-4 = malo
+            let tp9 = Int(packet.getEegChannelValue(.tp9))
+            let af7 = Int(packet.getEegChannelValue(.af7))
+            let af8 = Int(packet.getEegChannelValue(.af8))
+            let tp10 = Int(packet.getEegChannelValue(.tp10))
+            
+            currentQuality = SignalQuality(
+                tp9: qualityLevel(from: tp9),
+                af7: qualityLevel(from: af7),
+                af8: qualityLevel(from: af8),
+                tp10: qualityLevel(from: tp10)
+            )
+            
+            onQualityChanged?(currentQuality)
+            
+        case .battery:
+            // Battery level (0-100%)
+            let level = Int(packet.getBatteryValue(.charge))
+            batteryLevel = level
+            onBatteryChanged?(level)
+            
+        case .drlRef:
+            // DRL (Driven Right Leg) and REF (Reference) electrode data
+            // Can be used for additional signal quality assessment
+            break
+            
+        default:
+            break
+        }
+    }
+    
+    func receive(_ packet: IXNMuseArtifactPacket, muse: IXNMuse?) {
+        // Artifacts: blinks, jaw clenches, etc.
+        // Can be used for detecting specific events
+    }
+    
+    // MARK: - Helpers
+    
+    private func qualityLevel(from value: Int) -> ContactQuality {
+        switch value {
+        case 1:
+            return .good
+        case 2:
+            return .ok
+        default:
+            return .poor
+        }
+    }
+}
+
+// MARK: - Signal Quality Models
+
+/// Calidad de señal para cada electrodo
+struct SignalQuality {
+    var tp9: ContactQuality = .unknown
+    var af7: ContactQuality = .unknown
+    var af8: ContactQuality = .unknown
+    var tp10: ContactQuality = .unknown
+    
+    /// Calidad promedio de todos los electrodos
+    var overall: ContactQuality {
+        let qualities = [tp9, af7, af8, tp10]
+        let scores = qualities.map { $0.score }
+        let avgScore = scores.reduce(0, +) / Double(scores.count)
+        
+        switch avgScore {
+        case 3.0...:
+            return .good
+        case 2.0..<3.0:
+            return .ok
+        default:
+            return .poor
+        }
+    }
+    
+    /// Porcentaje de electrodos con buen contacto
+    var goodContactPercentage: Double {
+        let qualities = [tp9, af7, af8, tp10]
+        let goodCount = qualities.filter { $0 == .good }.count
+        return Double(goodCount) / 4.0
+    }
+}
+
+/// Calidad de contacto de un electrodo individual
+enum ContactQuality: Int, Comparable {
+    case unknown = 0
+    case poor = 1
+    case ok = 2
+    case good = 3
+    
+    var score: Double {
+        return Double(self.rawValue)
+    }
+    
+    var description: String {
+        switch self {
+        case .unknown: return "Desconocido"
+        case .poor: return "Malo"
+        case .ok: return "Regular"
+        case .good: return "Bueno"
+        }
+    }
+    
+    var color: String {
+        switch self {
+        case .unknown: return "gray"
+        case .poor: return "red"
+        case .ok: return "orange"
+        case .good: return "green"
+        }
+    }
+    
+    static func < (lhs: ContactQuality, rhs: ContactQuality) -> Bool {
+        return lhs.rawValue < rhs.rawValue
+    }
+}
+

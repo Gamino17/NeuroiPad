@@ -1,0 +1,203 @@
+import SwiftUI
+
+/// Vista de calidad de señal estilo "Horseshoe" (herradura)
+/// Muestra la calidad del contacto de cada electrodo visualmente
+/// Similar a la app oficial de Muse
+struct SignalQualityHorseshoeView: View {
+    let quality: SignalQuality
+    let batteryLevel: Int
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Horseshoe visualization
+            ZStack {
+                // Head outline
+                headOutline
+                
+                // Electrodes
+                electrodeIndicator(for: .af7, quality: quality.af7)
+                    .position(x: 60, y: 50)
+                
+                electrodeIndicator(for: .af8, quality: quality.af8)
+                    .position(x: 140, y: 50)
+                
+                electrodeIndicator(for: .tp9, quality: quality.tp9)
+                    .position(x: 30, y: 100)
+                
+                electrodeIndicator(for: .tp10, quality: quality.tp10)
+                    .position(x: 170, y: 100)
+            }
+            .frame(width: 200, height: 150)
+            
+            // Quality summary
+            qualitySummary
+            
+            // Battery indicator
+            batteryIndicator
+        }
+        .padding()
+        .background(Color.black.opacity(0.8))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Head Outline
+    
+    private var headOutline: some View {
+        ZStack {
+            // Head shape
+            Circle()
+                .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                .frame(width: 120, height: 120)
+                .position(x: 100, y: 90)
+            
+            // Nose indicator
+            Path { path in
+                path.move(to: CGPoint(x: 100, y: 30))
+                path.addLine(to: CGPoint(x: 90, y: 20))
+                path.addLine(to: CGPoint(x: 110, y: 20))
+                path.closeSubpath()
+            }
+            .fill(Color.gray.opacity(0.3))
+        }
+    }
+    
+    // MARK: - Electrode Indicator
+    
+    private func electrodeIndicator(for channel: EEGChannel, quality: ContactQuality) -> some View {
+        VStack(spacing: 4) {
+            // Electrode circle
+            Circle()
+                .fill(qualityColor(quality))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white, lineWidth: 2)
+                )
+            
+            // Label
+            Text(channel.rawValue)
+                .font(.caption2.bold())
+                .foregroundColor(.white)
+        }
+    }
+    
+    // MARK: - Quality Summary
+    
+    private var qualitySummary: some View {
+        HStack(spacing: 16) {
+            // Overall quality
+            VStack(spacing: 4) {
+                Text("Calidad General")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text(quality.overall.description)
+                    .font(.subheadline.bold())
+                    .foregroundColor(qualityColor(quality.overall))
+            }
+            
+            Divider()
+                .background(Color.gray)
+            
+            // Good contact percentage
+            VStack(spacing: 4) {
+                Text("Contacto Bueno")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text("\(Int(quality.goodContactPercentage * 100))%")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    // MARK: - Battery Indicator
+    
+    private var batteryIndicator: some View {
+        HStack(spacing: 8) {
+            Image(systemName: batteryIcon)
+                .foregroundColor(batteryColor)
+            
+            Text("\(batteryLevel)%")
+                .font(.caption.bold())
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.gray.opacity(0.2))
+        .cornerRadius(8)
+    }
+    
+    // MARK: - Helpers
+    
+    private func qualityColor(_ quality: ContactQuality) -> Color {
+        switch quality {
+        case .unknown:
+            return .gray
+        case .poor:
+            return .red
+        case .ok:
+            return .orange
+        case .good:
+            return .green
+        }
+    }
+    
+    private var batteryIcon: String {
+        if batteryLevel > 75 {
+            return "battery.100"
+        } else if batteryLevel > 50 {
+            return "battery.75"
+        } else if batteryLevel > 25 {
+            return "battery.50"
+        } else {
+            return "battery.25"
+        }
+    }
+    
+    private var batteryColor: Color {
+        if batteryLevel > 20 {
+            return .green
+        } else if batteryLevel > 10 {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+}
+
+// MARK: - Preview
+
+struct SignalQualityHorseshoeView_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 32) {
+                // Good quality
+                SignalQualityHorseshoeView(
+                    quality: SignalQuality(
+                        tp9: .good,
+                        af7: .good,
+                        af8: .good,
+                        tp10: .good
+                    ),
+                    batteryLevel: 85
+                )
+                
+                // Mixed quality
+                SignalQualityHorseshoeView(
+                    quality: SignalQuality(
+                        tp9: .good,
+                        af7: .ok,
+                        af8: .poor,
+                        tp10: .good
+                    ),
+                    batteryLevel: 45
+                )
+            }
+        }
+    }
+}
+
